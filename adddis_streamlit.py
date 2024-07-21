@@ -15,47 +15,39 @@ df = df = pd.read_csv('AddDis調製データ.csv', encoding='cp932')
 krebs = pd.read_excel('mst_data.xlsx', sheet_name='krebs')
 ex = pd.read_excel('mst_data.xlsx', sheet_name='exclusion')
 exclusion = ex['薬品コード'].to_list()
+ph = pd.read_excel('mst_data.xlsx', sheet_name='ph')
+ph_dict = {}
+for i in range(len(ph)):
+    key = ph.iloc[i, 0]
+    value = ph.iloc[i, 1]
+    ph_dict[f'{key}'] = value
+ph_list = ph['調製者'].to_list()
 # str日付をdatetimeに変換
 df['実施日'] = pd.to_datetime(df['実施日'])
 for i in range(len(df)):
     dt = df.loc[i, '実施日']
-    startTime = df.loc[i, '調製開始']
-    startTime = f'{startTime:08}'  #0埋め
-    h1 = int(startTime[0:2])
-    m1 = int(startTime[3:5])
-    s1= int(startTime[6:8])
-    df.loc[i, '調製開始'] = dt + datetime.timedelta(hours=h1, minutes=m1, seconds=s1)
-
-    m2 = int(df.loc[i, '調製時間'][2:4])
-    s2= int(df.loc[i, '調製時間'][5:7])
-    df.loc[i, '調製時間'] = dt + datetime.timedelta(minutes=m2, seconds=s2)
-
-    if type(df.loc[i, '保留時間']) == float:  #csv 空欄はfloat
-        df.loc[i, '保留時間'] = dt
-    else:
-        m3= int(df.loc[i, '保留時間'][2:4])
-        s3= int(df.loc[i, '保留時間'][5:7])
-        df.loc[i, '保留時間'] = dt + datetime.timedelta(minutes=m3, seconds=s3)
-    
+    h1, m1, s1 = df.loc[i, '調製開始'].split(':')
+    df.loc[i, '調製開始'] = dt + datetime.timedelta(hours=int(h1), minutes=int(m1), seconds=int(s1))
+    h2, m2, s2 = df.loc[i, '調製時間'].split(':')
+    df.loc[i, '調製時間'] = dt + datetime.timedelta(minutes=int(m2), seconds=int(s2))
+# 不要な行・列を削除   
 df1 = df.query('薬品コード != @exclusion')
 df1 = df1[['実施日', '入外', '科名', '病棟', 'オーダー番号', '調製者', '薬品本数', '薬品コード', '薬品名', '調製開始', '調製時間', '保留時間',]]
 df1.sort_values('オーダー番号', ascending=True, inplace=True)
 
-#オーダ番号がないレコードは削除
+# オーダ番号がないレコードは削除
 df1.dropna(subset='オーダー番号', inplace=True)
 df1 = pd.merge(df1, krebs, how='inner')
-#df1.sort_values('オーダー番号', ascending=True, inplace=True)
 
-#オーダー番号と用量（合計）の紐づけ
+# オーダー番号と用量（合計）の紐づけ
 df1['mg'] = df1['薬品本数'] * df1['contain']
-
 dose = df1.pivot_table(index='オーダー番号', values='mg', aggfunc='sum')
 dose.reset_index(inplace=True)
 
 # 調製時間の算出
 prep_times = []
 for i in range(len(df1)):
-    tdelta = df1.loc[i, '調製時間'] - df1.loc[i, '保留時間']
+    tdelta = df1.loc[i, '調製時間'] - df1.loc[i, '実施日']
     sec = tdelta.total_seconds()  #秒に換算
     prep_times.append(sec/60)
 df1['prep_time'] = prep_times
@@ -70,6 +62,17 @@ for i in range(len(df)):
     hours.append(hour)
 df['hour'] = hours
 dates = sorted(list(set(df['実施日'].tolist())))
+
+# 曜日
+wd = []
+for i in range(len(df)):
+  weekday = df.loc[i, '実施日'].strftime('%a')
+  wd.append(weekday)
+df['wd'] = wd
+# 調製者データのマスク
+for i in range(len(df)):
+  key = df.loc[i, '調製者']
+  df.loc[i, '調製者'] = ph_dict[key]
 
 # 時間ごとの調製件数（1日）-----------------------------
 with st.sidebar:
@@ -197,3 +200,33 @@ if btn3:
     st.altair_chart(top_hist & (points | right_hist))
     st.write('')
     st.dataframe(df_rank)
+
+# ヒストグラムと平均調製時間-----------------------------
+with st.sidebar:
+    st.write('---')
+    std_drug = st.selectbox('標準薬', ['GEM', 'Aza', 'PTX'])
+    ph = st.selectbox('調製者', df['調製者'].unique().tolist())
+    btn4 = st.button('平均調製時間')
+if btn4:
+    df_hist = df4.query(f'stem == "{std_drug}"')
+    df_hist = df_hist[['調製者', 'mg', 'prep_time']]
+    df_hist_ph = df_hist.query(f'調製者 == "{ph}"')
+    df_hist_ph.rename(columns={'prep_time': '調製時間'}, inplace=True)
+    if len(df_hist_ph) == 0:
+        st.write(f'{ph}の{std_drug}調製歴はありません。')
+    else:
+        mean = df_hist_ph['調製時間'].mean()
+        base = alt.Chart(df_hist).mark_bar().encode(
+                x=alt.X('prep_time:Q', 
+                        bin=alt.Bin(maxbins=20),
+                        title='調製時間(min)'
+                        ),
+                y=alt.Y('count()', title='')
+                ).properties(
+                title=f'{std_drug}調製時間の分布と平均値({ph})')
+        rule = base.mark_rule(
+                    size=1, color='red'
+                    ).encode(x=alt.datum(mean))
+        st.altair_chart(base + rule)
+        st.write(f'平均調製時間: {mean:.1f}(min)')
+        st.dataframe(df_hist_ph)
