@@ -89,7 +89,7 @@ if btn2:
 # 医薬品ごとの調製時間-----------------------------
 df4 = df.dropna(subset='stem') #マスタにない薬剤（Nan）を削除
 #選択した薬剤の用量別調製時間を確認
-drugs = df4['stem'].unique().tolist()
+drugs = sorted(df4['stem'].unique().tolist())
 with st.sidebar:
     drug = st.selectbox('抗がん薬を選択', drugs)
     btn3 = st.button('調製時間の分布')
@@ -166,4 +166,4 @@ if btn4:
                     ).encode(x=alt.datum(mean))
         st.altair_chart(base + rule)
         st.write(f'平均調製時間: {mean:.1f}(min)')
-        st.dataframe(df_hist_ph.style.highlight_max(axis=0))
+        st.dataframe(df_hist_ph)
