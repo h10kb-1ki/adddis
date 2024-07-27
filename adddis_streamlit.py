@@ -7,10 +7,11 @@ st.title('AddDisデータ分析')
 st.write('')
 
 # データの読込み-----------------------------------------------
-df = pd.read_excel('AddDis調製データ.xlsx')
+df = pd.read_excel('AddDis調製データ.xlsx')
 
 # 時間ごとの調製件数（1日）-----------------------------
-dates = df['実施日'].unique().tolist()
+dates = sorted(list(set(df['実施日'].tolist())))
+#dates = df['実施日'].unique().tolist()  #これだと上手くdatetimeにならない
 with st.sidebar:
     day = st.date_input('日を指定', dates[0], min_value=dates[0], max_value=dates[len(dates)-1])
     btn1 = st.button('時間ごとの調製件数（1日）')
