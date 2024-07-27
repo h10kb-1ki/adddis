@@ -142,7 +142,7 @@ if btn3:
 with st.sidebar:
     st.write('---')
     std_drug = st.selectbox('標準薬', ['GEM', 'Aza', 'PTX'])
-    ph = st.selectbox('調製者', df['調製者'].unique().tolist())
+    ph = st.selectbox('調製者', sorted(df['調製者'].unique().tolist()))
     btn4 = st.button('平均調製時間')
 if btn4:
     df_hist = df4.query(f'stem == "{std_drug}"')
@@ -166,4 +166,4 @@ if btn4:
                     ).encode(x=alt.datum(mean))
         st.altair_chart(base + rule)
         st.write(f'平均調製時間: {mean:.1f}(min)')
-        st.dataframe(df_hist_ph)
+        st.dataframe(df_hist_ph.style.highlight_max(axis=0))
